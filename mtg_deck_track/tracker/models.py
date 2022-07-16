@@ -124,10 +124,10 @@ class Match(models.Model):
 class Game(models.Model):
     match = models.ForeignKey(Match, on_delete=models.PROTECT)
     player_win = models.BooleanField()
-    player_mulligans = models.IntegerField()
-    opponent_mulligans = models.IntegerField()
+    player_mulligans = models.IntegerField(default=0)
+    opponent_mulligans = models.IntegerField(default=0)
     game_notes = models.TextField(null=True, blank=True)
-    game_number = models.IntegerField()
+    game_number = models.IntegerField(choices=[(1, 'G1'), (2, 'G2'), (3, 'G3'), (4, 'G4'), (5, 'G5')])
 
     def __str__(self):
         return f"[{'X' if self.player_win else ' '}] Game {self.game_number} of {self.match}"
