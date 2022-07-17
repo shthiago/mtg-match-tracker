@@ -1,5 +1,8 @@
+from typing import List
 from django.contrib.auth.models import User
 from django.db import models
+
+from tracker.utils.deck_parser import DeckCard
 
 
 class Archetype(models.Model):
@@ -15,49 +18,14 @@ class Card(models.Model):
     def __str__(self):
         return self.name
 
-
-class CardListManyToManyField(models.ManyToManyField):
-    def value_from_object(self, obj):
-        if obj.pk is None:
-            return []
-
-        manager = getattr(obj, self.attname)
-
-        parts = manager.through.objects.filter(deck_id=obj.id)
-
-        return [(part.copies, part.card) for part in parts]
-
-    def save_form_data(self, deck: "Deck", data: str) -> None:
-        manager = getattr(deck, self.attname)
-        new_entries = []
-        for row in data.split("\n"):
-
-            stripped = row.strip()
-            if len(stripped) == 0:
-                continue
-
-            copies, cardname = stripped.split(" ", maxsplit=1)
-            copies = int(copies)
-            card = Card.objects.filter(name=cardname).first()
-
-            if not card:
-                raise Exception(f"Card  not found: {cardname}")
-
-            new_entries.append((copies, card))
-
-        manager.clear()
-        for copies, card in new_entries:
-            manager.add(card, through_defaults={"copies": copies})
-
-
 class Deck(models.Model):
     owner = models.ForeignKey(User, on_delete=models.PROTECT, null=True)
     archetype = models.ForeignKey(Archetype, on_delete=models.PROTECT, null=True)
     name = models.TextField()
-    maindeck = CardListManyToManyField(
+    maindeck = models.ManyToManyField(
         Card, through="MaindeckPart", related_name="in_maindeck"
     )
-    sideboard = CardListManyToManyField(
+    sideboard = models.ManyToManyField(
         Card, through="SideboardPart", related_name="in_sideboard"
     )
     FORMATS = [
@@ -69,6 +37,38 @@ class Deck(models.Model):
 
     def __str__(self):
         return self.name
+
+    def as_plaintext(self) -> str:
+        maindeck = [
+            f"{p.copies} {p.card.name}"
+            for p in self.maindeck.through.objects.filter(deck=self)
+        ]
+        sideboard = [
+            f"SB: {p.copies} {p.card.name}"
+            for p in self.sideboard.through.objects.filter(deck=self)
+        ]
+
+        return "\n".join(maindeck + sideboard)
+
+    def update_maindeck(self, cards: List[DeckCard]):
+        self._update_cards(self.maindeck, cards)
+
+    def update_sideboard(self, cards: List[DeckCard]):
+        self._update_cards(self.sideboard, cards)
+
+    def _update_cards(self, manager: models.ManyToManyField, cards: List[DeckCard]):
+        new_entries = []
+        for copies, cardname in cards:
+            card = Card.objects.filter(name=cardname).first()
+
+            if not card:
+                raise Exception(f"Card  not found: {cardname}")
+
+            new_entries.append((copies, card))
+
+        manager.clear()
+        for copies, card in new_entries:
+            manager.add(card, through_defaults={"copies": copies})
 
 
 class MaindeckPart(models.Model):
@@ -127,7 +127,9 @@ class Game(models.Model):
     player_mulligans = models.IntegerField(default=0)
     opponent_mulligans = models.IntegerField(default=0)
     game_notes = models.TextField(null=True, blank=True)
-    game_number = models.IntegerField(choices=[(1, 'G1'), (2, 'G2'), (3, 'G3'), (4, 'G4'), (5, 'G5')])
+    game_number = models.IntegerField(
+        choices=[(1, "G1"), (2, "G2"), (3, "G3"), (4, "G4"), (5, "G5")]
+    )
 
     def __str__(self):
         return f"[{'X' if self.player_win else ' '}] Game {self.game_number} of {self.match}"
