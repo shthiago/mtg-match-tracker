@@ -18,6 +18,11 @@ class Card(models.Model):
     def __str__(self):
         return self.name
 
+
+class CardListManyToManyField(models.ManyToManyField):
+    pass
+
+
 class Deck(models.Model):
     owner = models.ForeignKey(User, on_delete=models.PROTECT, null=True)
     archetype = models.ForeignKey(Archetype, on_delete=models.PROTECT, null=True)
